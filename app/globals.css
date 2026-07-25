@@ -1,0 +1,127 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Forced dark theme. `ink` and `paper` keep their roles (ink = ink on
+     the page, i.e. foreground; paper = the document stock, i.e. surface)
+     but the light-mode values are swapped, so every existing bg-paper /
+     text-ink class in the app renders as a dark surface with light text
+     with no component changes needed. Admit/refuse are brightened from
+     their light-mode values to stay legible as text on the dark surface. */
+  --color-ink: #eef1f0; /* was paper — now the foreground */
+  --color-paper: #10233f; /* was ink — now the surface (passport navy) */
+  --color-guilloche: #c9d4d6; /* engraved line pattern */
+  --color-admit: #22c08a; /* viridian ADMITTED stamp, brightened for dark */
+  --color-refuse: #ef5646; /* oxblood REFUSED stamp, brightened for dark */
+  --color-foil: #b08d3f; /* foil-block gold — already tuned for a navy surface */
+
+  --tracking-plate: 0.28em; /* engraved-plate caps spacing */
+}
+
+@theme inline {
+  /* next/font sets these as raw font-family values on <html>; "inline"
+     substitutes them directly into the utility instead of redeclaring the
+     same variable name at :root, which would be a circular reference. */
+  --font-display: var(--font-display), serif;
+  --font-body: var(--font-body), system-ui, sans-serif;
+  --font-mono: var(--font-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    /* Forces dark native form controls / scrollbars regardless of the
+       visitor's OS preference — there is no light variant of this page. */
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-paper text-ink font-body antialiased;
+  }
+
+  /* Visible keyboard focus everywhere, not just on default-styled controls. */
+  :focus-visible {
+    outline: 2px solid theme('colors.ink');
+    outline-offset: 3px;
+  }
+}
+
+@layer components {
+  /*
+   * Guilloche: the interference pattern engraved on passports and banknotes.
+   * Faked with overlapping repeating gradients at coprime angles so the
+   * moire never visibly tiles. Kept very low contrast — it's stock texture,
+   * not decoration you should notice.
+   */
+  .guilloche {
+    background-image:
+      repeating-linear-gradient(
+        37deg,
+        theme('colors.guilloche') 0px,
+        theme('colors.guilloche') 0.5px,
+        transparent 0.5px,
+        transparent 7px
+      ),
+      repeating-linear-gradient(
+        -53deg,
+        theme('colors.guilloche') 0px,
+        theme('colors.guilloche') 0.5px,
+        transparent 0.5px,
+        transparent 9px
+      );
+    opacity: 0.5;
+  }
+
+  /* Perforated edge, like the tear line on an entry permit. */
+  .perforated {
+    background-image: radial-gradient(
+      circle at 3px 50%,
+      theme('colors.paper') 2.5px,
+      transparent 2.6px
+    );
+    background-size: 12px 100%;
+  }
+}
+
+@layer utilities {
+  /*
+   * The signature moment: a rubber stamp coming down. Overshoots, settles,
+   * lands slightly off-square. Rotation is per-instance via --stamp-rot so
+   * no two stamps sit at the same angle.
+   */
+  @keyframes stamp-down {
+    0% {
+      transform: scale(2.6) rotate(var(--stamp-rot, -8deg));
+      opacity: 0;
+    }
+    55% {
+      transform: scale(0.92) rotate(var(--stamp-rot, -8deg));
+      opacity: 1;
+    }
+    75% {
+      transform: scale(1.05) rotate(var(--stamp-rot, -8deg));
+    }
+    100% {
+      transform: scale(1) rotate(var(--stamp-rot, -8deg));
+      opacity: 1;
+    }
+  }
+
+  .animate-stamp {
+    animation: stamp-down 420ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+  }
+
+  /* On the light-mode paper, multiply let ink sit *in* the surface rather
+     than on top of it. Multiplying against the dark surface just muddies
+     the stamp toward black instead, so it's a no-op on this palette. */
+  .ink-blend {
+    mix-blend-mode: normal;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-stamp {
+    animation: none;
+  }
+  * {
+    transition-duration: 0.01ms !important;
+  }
+}
