@@ -37,6 +37,14 @@
     @apply bg-paper text-ink font-body antialiased;
   }
 
+  /* Shared form control — dark security-paper field. */
+  .input {
+    @apply w-full rounded-md border border-ink/25 bg-ink/5 px-3 py-2 text-sm font-medium text-ink placeholder:text-ink/40;
+  }
+  .input:focus-visible {
+    @apply border-foil outline-none;
+  }
+
   /* Visible keyboard focus everywhere, not just on default-styled controls. */
   :focus-visible {
     outline: 2px solid theme('colors.ink');

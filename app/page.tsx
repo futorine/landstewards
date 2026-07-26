@@ -1,209 +1,154 @@
 'use client';
 
-import { useState } from 'react';
-import {
-  initialState,
-  addClaim,
-  revokeClaim,
-  reinstateClaim,
-  isEligible,
-  isClaimValid,
-  readSurfaces,
-  failingClaims,
-} from '@/lib/mock/chain';
-import type { ChainState, ClaimTopic, LogEntry } from '@/lib/mock/types';
-import IdentityPanel from '@/components/IdentityPanel';
-import SurfaceCard from '@/components/SurfaceCard';
-import Controls from '@/components/Controls';
-import MrzStrip from '@/components/MrzStrip';
+import Link from 'next/link';
+import { useLand } from '@/components/LandStateProvider';
+import { attestedStewards, pendingStewards, slotsFilled } from '@/lib/mock/land';
+import SiteHeader from '@/components/SiteHeader';
+import StewardCircle from '@/components/StewardCircle';
+import StewardCard from '@/components/StewardCard';
 import EvidencePanel from '@/components/EvidencePanel';
-import ClaimProgress from '@/components/ClaimProgress';
 
-export default function Page() {
-  const [state, setState] = useState<ChainState>(initialState);
-  const [log, setLog] = useState<LogEntry[]>([]);
-  /** Bumped on every state change so the stamps re-slam. */
-  const [generation, setGeneration] = useState(0);
-
-  function apply(
-    next: ChainState,
-    entry: Omit<LogEntry, 'at' | 'eligibleAfter'>
-  ) {
-    setState(next);
-    setLog((prev) => [
-      ...prev,
-      { ...entry, at: new Date().toISOString(), eligibleAfter: isEligible(next) },
-    ]);
-    setGeneration((g) => g + 1);
-  }
-
-  function handleSubmitClaim(topic: ClaimTopic) {
-    apply(addClaim(state, topic), {
-      actor: 'holder',
-      action: 'identity.addClaim',
-      detail: `Holder submitted the ${state.claims[topic].label} claim signed by the issuer.`,
-    });
-  }
-
-  function handleRevoke(topic: ClaimTopic) {
-    apply(revokeClaim(state, topic), {
-      actor: 'issuer',
-      action: 'claimIssuer.revokeClaim',
-      detail: `Issuer revoked ${state.claims[topic].label} on its own contract. The identity was not touched.`,
-    });
-  }
-
-  function handleReinstate(topic: ClaimTopic) {
-    apply(reinstateClaim(state, topic), {
-      actor: 'issuer',
-      action: 'claimIssuer.reinstateClaim',
-      detail: `Issuer reinstated ${state.claims[topic].label}.`,
-    });
-  }
-
-  function handleReset() {
-    setState(initialState());
-    setLog([]);
-    setGeneration((g) => g + 1);
-  }
-
-  const surfaces = readSurfaces(state);
-  const admitted = isEligible(state);
-  const failing = failingClaims(state);
-  const validRequired = state.policy.requires.filter((topic) =>
-    isClaimValid(state, topic)
-  ).length;
+export default function StewardsOverview() {
+  const { state } = useLand();
+  const { project } = state;
+  const filled = slotsFilled(state);
+  const attested = attestedStewards(state);
+  const pending = pendingStewards(state);
 
   return (
-    <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-16">
-      {/* Cover: foil-block heading, the way a passport front reads. */}
-      <header className="overflow-hidden rounded-2xl border-2 border-ink">
-        <div className="relative overflow-hidden bg-paper px-6 py-10 text-ink sm:px-10 sm:py-14">
-          <div className="absolute inset-0 guilloche opacity-[0.08]" aria-hidden />
-          <div className="relative">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-plate text-foil">
-              Eligibility control
-            </p>
-            <h1 className="mt-4 font-display text-4xl font-black uppercase leading-[0.95] tracking-[0.06em] sm:text-6xl">
-              ZK Credential
-              <br />
-              Attestor
-            </h1>
-            <p className="mt-6 max-w-xl text-sm font-medium leading-relaxed text-ink/85 sm:text-base">
-              One identity, one question any contract can ask. Grant the claims,
-              watch four surfaces open. Revoke one claim and watch all four shut —
-              from a single write the issuer makes to its own contract.
-            </p>
-          </div>
-        </div>
+    <main className="mx-auto max-w-5xl px-5 py-10 sm:px-8 sm:py-14">
+      <SiteHeader />
 
-        {/* The live verdict, stated once, large. */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-t-2 border-ink bg-paper px-6 py-5 sm:px-10">
-          <div>
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-ink/60">
-              gate.isEligible(identity, {state.policy.id})
-            </p>
-            <p
-              className={[
-                'mt-1 font-display text-3xl font-black uppercase tracking-[0.1em]',
-                admitted ? 'text-admit' : 'text-refuse',
-              ].join(' ')}
-            >
-              {admitted ? 'Green' : 'Red'}
-            </p>
-          </div>
-          <p className="max-w-xs text-xs font-medium leading-relaxed text-ink/75">
-            {admitted
-              ? 'All required claims valid. Every surface is passing traffic.'
-              : `Missing or revoked: ${failing
-                  .map((t) => state.claims[t].label.toLowerCase())
-                  .join(', ')}.`}
+      {/* Hero: the land, the ring, the stewards */}
+      <section className="grid items-center gap-8 lg:grid-cols-[1fr_1.1fr]">
+        <div>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-plate text-foil">
+            {project.location} · {project.hectares} ha
           </p>
+          <h2 className="mt-3 font-display text-4xl font-black uppercase leading-[0.95] tracking-[0.04em] sm:text-5xl">
+            {project.displayName}
+          </h2>
+          <p className="mt-4 max-w-md text-sm font-medium leading-relaxed text-ink/85">
+            {project.mandate}
+          </p>
+
+          <dl className="mt-6 grid max-w-md grid-cols-3 gap-3">
+            <Stat label="Slots filled" value={`${filled}/${project.maxSlots}`} tone="admit" />
+            <Stat label="Attested" value={String(attested.length)} tone="admit" />
+            <Stat label="In process" value={String(pending.length)} tone="refuse" />
+          </dl>
+
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href="/register"
+              className="rounded-md border-2 border-foil px-5 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] text-foil transition-colors hover:bg-foil hover:text-paper"
+            >
+              Register as a steward
+            </Link>
+          </div>
         </div>
 
-        <MrzStrip state={state} />
-      </header>
+        <StewardCircle state={state} />
+      </section>
 
-      <div className="mt-8 flex justify-center">
-        <ClaimProgress
-          current={validRequired}
-          total={state.policy.requires.length}
-          eligible={admitted}
-        />
+      {/* Legend */}
+      <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/60">
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-admit" />
+          Attested · inside the ring · holds a slot subname
+        </span>
+        <span className="flex items-center gap-2">
+          <span className="inline-block h-2.5 w-2.5 rounded-full bg-refuse" />
+          In process · outside · awaiting attestation
+        </span>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1.1fr_1fr]">
-        <IdentityPanel state={state} />
-        <Controls
-          state={state}
-          onSubmitClaim={handleSubmitClaim}
-          onRevoke={handleRevoke}
-          onReinstate={handleReinstate}
-          onReset={handleReset}
-        />
-      </div>
-
+      {/* Roster */}
       <section className="mt-10">
-        <h2 className="font-display text-sm font-black uppercase tracking-plate">
-          Enforcement surfaces
-        </h2>
+        <h3 className="font-display text-sm font-black uppercase tracking-plate">
+          The roster
+        </h3>
         <p className="mt-2 max-w-2xl text-sm font-medium text-ink/80">
-          Each one calls the same view function. None of them caches the answer,
-          which is why a single revocation reaches all four with no further
-          transactions.
+          Every steward, seated or waiting. Each stewardship slot is an ENS
+          subname of {project.ensName} whose record points at the steward&rsquo;s
+          own ENS name — reassignable when people leave or join.
         </p>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          {surfaces.map((surface, i) => (
-            <SurfaceCard
-              key={surface.id}
-              surface={surface}
-              index={i}
-              generation={generation}
-            />
+          {state.stewards.map((s) => (
+            <StewardCard key={s.id} steward={s} state={state} />
           ))}
         </div>
       </section>
 
-      {log.length > 0 && (
+      {state.log.length > 0 && (
         <section className="mt-10 rounded-2xl border border-ink/20 bg-paper p-6">
-          <h2 className="font-display text-sm font-black uppercase tracking-plate">
-            Run log
-          </h2>
+          <h3 className="font-display text-sm font-black uppercase tracking-plate">
+            Registry log
+          </h3>
           <ol className="mt-4 space-y-3">
-            {log.map((entry, i) => (
-              <li key={i} className="flex gap-4 border-b border-ink/10 pb-3 last:border-0">
-                <span className="shrink-0 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/55">
-                  {String(i + 1).padStart(2, '0')}
-                </span>
-                <div className="min-w-0">
-                  <p className="font-mono text-[11px] font-semibold text-ink/85">{entry.action}</p>
-                  <p className="mt-0.5 text-sm font-medium text-ink">{entry.detail}</p>
-                </div>
-                <span
-                  className={[
-                    'ml-auto shrink-0 font-mono text-[10px] uppercase tracking-[0.16em]',
-                    entry.eligibleAfter ? 'text-admit' : 'text-refuse',
-                  ].join(' ')}
+            {state.log
+              .slice()
+              .reverse()
+              .map((entry, i) => (
+                <li
+                  key={i}
+                  className="flex gap-4 border-b border-ink/10 pb-3 last:border-0"
                 >
-                  {entry.eligibleAfter ? 'Green' : 'Red'}
-                </span>
-              </li>
-            ))}
+                  <span className="shrink-0 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/55">
+                    {entry.actor}
+                  </span>
+                  <div className="min-w-0">
+                    <p className="font-mono text-[11px] font-semibold text-ink/85">
+                      {entry.action}
+                    </p>
+                    <p className="mt-0.5 text-sm font-medium text-ink">
+                      {entry.detail}
+                    </p>
+                  </div>
+                </li>
+              ))}
           </ol>
         </section>
       )}
 
       <div className="mt-10">
-        <EvidencePanel state={state} log={log} />
+        <EvidencePanel />
       </div>
 
       <footer className="mt-10 border-t border-ink/20 pt-5">
         <p className="font-mono text-[10px] font-semibold uppercase leading-relaxed tracking-[0.16em] text-ink/60">
-          Identity, claim issuer, gate and resolver are simulated in this harness.
-          The Walrus upload is live. Don&rsquo;t trust us. Verify us.
+          Roster and attestation are simulated in this harness. Slot subname
+          records are written for real on ENS (Sepolia), signed by a Privy
+          embedded wallet. Don&rsquo;t trust us. Verify us.
         </p>
       </footer>
     </main>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: 'admit' | 'refuse';
+}) {
+  return (
+    <div className="rounded-lg border border-ink/15 bg-paper/70 px-3 py-2">
+      <dd
+        className={[
+          'font-display text-2xl font-black tabular-nums',
+          tone === 'admit' ? 'text-admit' : 'text-refuse',
+        ].join(' ')}
+      >
+        {value}
+      </dd>
+      <dt className="mt-0.5 font-mono text-[9px] font-bold uppercase tracking-[0.16em] text-ink/60">
+        {label}
+      </dt>
+    </div>
   );
 }

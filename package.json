@@ -1,9 +1,9 @@
 {
-  "name": "zk-credential-attestor-node-evidence",
+  "name": "landstewards",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --experimental-https",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

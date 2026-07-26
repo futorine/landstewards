@@ -1,18 +1,15 @@
 /**
- * LIVE COMPONENT — real ENS reads against Sepolia. This is the second live
- * piece of the project alongside Walrus; everything else (Identity,
- * ClaimIssuer, EligibilityGate) stays simulated.
+ * LIVE COMPONENT — real ENS reads against Sepolia. Only the steward roster is
+ * simulated (see lib/mock/land.ts); reads here hit the chain.
  *
  * Reads use viem's built-in ENS actions, which resolve through the ENS
- * Universal Resolver Contract and work out of the box against viem's
- * `sepolia` chain definition. If ENS ever redeploys and viem's bundled
- * address goes stale, ENS_UNIVERSAL_RESOLVER overrides it — check
- * https://docs.ens.domains/learn/deployments if reads start failing.
+ * Universal Resolver and work out of the box against viem's `sepolia` chain
+ * definition. If ENS redeploys and viem's bundled address goes stale,
+ * ENS_UNIVERSAL_RESOLVER overrides it.
  *
- * The evidence WRITE does not live here. It is signed client-side by the
- * presenter's Privy embedded wallet — see lib/ens-write-client.ts. That
- * keeps any signing key out of this server bundle entirely; the only shared
- * piece is the setText ABI below.
+ * Writes do not live here. They are signed client-side by the connected
+ * wallet — see lib/ens-write-client.ts — which keeps any signing key out of
+ * this server bundle entirely. The only shared piece is the setText ABI below.
  */
 
 import { createPublicClient, http } from 'viem';
@@ -44,20 +41,23 @@ export async function readEnsText(
   return publicClient.getEnsText({ name: normalize(name), key, ...resolverOpt });
 }
 
-/** Which resolver contract currently serves this name. */
-export async function readEnsResolverAddress(name: string) {
-  return publicClient.getEnsResolver({ name: normalize(name), ...resolverOpt });
-}
+/**
+ * Deliberately no `readEnsResolverAddress` helper here.
+ *
+ * Resolving a name to its resolver looks like an existence check but is not
+ * one: ENSv2 wildcard resolution returns the parent's resolver for any
+ * unregistered subname, so every conceivable name appears to resolve. Slot
+ * existence comes from registry state — see `readSlotState` in lib/ens-v2.ts.
+ */
 
 /**
  * ENSIP-5 / EIP-634 standard text-record write interface, implemented by
  * ENS's Public Resolver and by most custom resolvers that support text
  * records. Shared with the client-side write helper.
  *
- * NOTE: if the deployed resolver is a fully custom contract built only for
- * the computed status/policy/identity keys, it may not accept arbitrary
- * writes — confirm it implements setText for the `evidence` key before the
- * demo, or the write will revert.
+ * NOTE: a fully custom resolver may not accept arbitrary keys. Confirm it
+ * implements setText for the keys this app writes (`steward`, `evidence`)
+ * before relying on it, or the write will revert.
  */
 export const TEXT_RESOLVER_ABI = [
   {

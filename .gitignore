@@ -1,2 +1,7 @@
 node_modules/
 .next/
+.env*.local
+.notes/
+certificates
+tsconfig.tsbuildinfo
+.DS_Store

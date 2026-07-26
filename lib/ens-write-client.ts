@@ -1,14 +1,14 @@
 /**
- * CLIENT-SIDE ENS WRITE — signed by the presenter's Privy embedded wallet.
+ * CLIENT-SIDE ENS WRITE — signed by the connected wallet.
  *
  * The whole point of doing this in the browser: no signing key touches the
- * server bundle or .env. The embedded wallet's EIP-1193 provider both signs
- * and broadcasts the setText transaction, and viem's public actions over that
+ * server bundle or .env. The wallet's EIP-1193 provider both signs and
+ * broadcasts the setText transaction, and viem's public actions over that
  * same provider wait for the receipt — so no NEXT_PUBLIC RPC is needed either.
  *
- * The signing address must still be authorized to write records for the name
- * (owner/controller, or approved via the registry / resolver). That's a
- * one-time pre-demo step — see the README.
+ * The signing address must be authorized to write records for the name.
+ * Signing with the wallet that owns the project needs no extra setup; any
+ * other signer must be granted the relevant role on the project's subregistry.
  */
 
 import {

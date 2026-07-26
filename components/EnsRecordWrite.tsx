@@ -15,64 +15,82 @@ import {
 import EnsTag from './EnsTag';
 
 /**
- * Step 2 of the evidence flow: write the Walrus pointer to the ENS `evidence`
- * text record, signed live by the presenter's Privy embedded wallet. Rendered
- * only when NEXT_PUBLIC_PRIVY_APP_ID is configured (see EvidencePanel), so the
- * Privy hooks below always run inside a mounted PrivyProvider.
+ * The project's one real on-chain action, reused wherever a text record is
+ * written to ENS: a slot's `steward` pointer, or the project's `evidence`
+ * pointer. Signs `setText(node, key, value)` live with the Privy embedded
+ * wallet, then reads the record straight back off the resolver (server-side,
+ * a different RPC path) to prove the round trip.
+ *
+ * Rendered only where NEXT_PUBLIC_PRIVY_APP_ID is configured, so the Privy
+ * hooks always run inside a mounted PrivyProvider.
  */
-export default function EnsPublish({
-  ensName,
-  textKey,
+export default function EnsRecordWrite({
+  node,
+  recordKey,
   value,
+  title,
+  description,
+  confirmLabel = 'Sign & write on-chain',
+  disabled = false,
+  disabledReason,
+  onConfirmed,
 }: {
-  ensName: string;
-  textKey: string;
+  node: string;
+  recordKey: string;
   value: string;
+  title: string;
+  description?: React.ReactNode;
+  confirmLabel?: string;
+  disabled?: boolean;
+  disabledReason?: string;
+  onConfirmed?: (result: EnsWriteResult, readBack: string | null) => void;
 }) {
   const { ready, authenticated, login, logout } = usePrivy();
   const { wallets } = useWallets();
 
-  const [status, setStatus] = useState<'idle' | 'publishing'>('idle');
+  const [status, setStatus] = useState<'idle' | 'writing'>('idle');
   const [result, setResult] = useState<EnsWriteResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [liveRecord, setLiveRecord] = useState<string | null>(null);
 
-  const embedded = getEmbeddedConnectedWallet(wallets);
+  // Sign with the embedded wallet if there is one, otherwise the first
+  // connected wallet (e.g. an injected Brave / MetaMask wallet). When the
+  // connected wallet also owns the name, no setApprovalForAll is needed.
+  const active = getEmbeddedConnectedWallet(wallets) ?? wallets[0];
 
-  async function publish() {
-    setStatus('publishing');
+  async function write() {
+    setStatus('writing');
     setError(null);
     setResult(null);
     setLiveRecord(null);
 
     try {
-      const wallet = getEmbeddedConnectedWallet(wallets);
+      const wallet = getEmbeddedConnectedWallet(wallets) ?? wallets[0];
       if (!wallet) {
-        throw new Error(
-          'No embedded wallet found. Log out and back in to provision one.'
-        );
+        throw new Error('No connected wallet. Connect one and try again.');
       }
 
-      // Embedded wallets follow defaultChain, but switch explicitly in case
-      // the session was left on another network.
+      // Make sure the wallet is on Sepolia before signing.
       await wallet.switchChain(sepolia.id);
       const provider = (await wallet.getEthereumProvider()) as EIP1193Provider;
 
       const writeResult = await writeEnsTextWithProvider(
         provider,
-        ensName,
-        textKey,
+        node,
+        recordKey,
         value
       );
       setResult(writeResult);
 
-      // Read the record straight back from the resolver — server-side, via a
-      // different RPC path than the one that wrote it — to prove the round trip.
+      // Read the record straight back from the resolver to prove the round trip.
       const readRes = await fetch(
-        `/api/ens/read?name=${encodeURIComponent(ensName)}&key=${encodeURIComponent(textKey)}`
+        `/api/ens/read?name=${encodeURIComponent(node)}&key=${encodeURIComponent(recordKey)}`
       );
       const readData = await readRes.json();
-      if (readRes.ok) setLiveRecord(readData.value);
+      const readBack = readRes.ok ? readData.value : null;
+      if (readRes.ok) setLiveRecord(readBack);
+
+      onConfirmed?.(writeResult, readBack);
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -83,14 +101,17 @@ export default function EnsPublish({
   return (
     <div className="border-t border-ink/25 pt-4">
       <p className="flex items-center gap-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-ink/60">
-        Step 2 — write the pointer on-chain
+        {title}
         <EnsTag />
       </p>
-      <p className="mt-1 text-xs font-medium leading-relaxed text-ink/75">
-        Sets the <code className="font-bold text-foil">{textKey}</code> text
-        record on {ensName}&rsquo;s resolver to the Read URL above. Real Sepolia
-        transaction, signed by your Privy embedded wallet.
-      </p>
+      {description && (
+        <p className="mt-1 text-xs font-medium leading-relaxed text-ink/75">
+          {description}
+        </p>
+      )}
+      <pre className="mt-2 overflow-x-auto whitespace-pre-wrap break-all rounded-md bg-ink/10 p-3 font-mono text-[11px] font-semibold text-ink">
+        {`setText(namehash("${node}"), "${recordKey}", "${value}")`}
+      </pre>
 
       {!authenticated ? (
         <button
@@ -103,16 +124,17 @@ export default function EnsPublish({
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-4">
           <button
-            onClick={publish}
-            disabled={status === 'publishing'}
+            onClick={write}
+            disabled={status === 'writing' || disabled}
+            title={disabled ? disabledReason : undefined}
             className="rounded-md border-2 border-foil px-5 py-2 font-mono text-xs font-bold uppercase tracking-[0.16em] text-foil transition-colors hover:bg-foil hover:text-paper disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {status === 'publishing' ? 'Publishing…' : 'Publish to ENS'}
+            {status === 'writing' ? 'Signing…' : confirmLabel}
           </button>
           <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-ink/60">
-            {embedded
-              ? `${embedded.address.slice(0, 6)}…${embedded.address.slice(-4)}`
-              : 'no embedded wallet'}
+            {active
+              ? `${active.address.slice(0, 6)}…${active.address.slice(-4)}`
+              : 'no wallet connected'}
             {' · '}
             <button
               onClick={logout}
@@ -124,6 +146,12 @@ export default function EnsPublish({
         </div>
       )}
 
+      {disabled && disabledReason && (
+        <p className="mt-2 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-refuse">
+          {disabledReason}
+        </p>
+      )}
+
       {error && (
         <div className="mt-4 rounded-lg border border-refuse bg-refuse/15 p-4">
           <p className="font-mono text-[10px] font-bold uppercase tracking-[0.16em] text-refuse">
@@ -131,9 +159,9 @@ export default function EnsPublish({
           </p>
           <p className="mt-1 text-sm font-semibold text-ink">{error}</p>
           <p className="mt-2 text-xs font-medium text-ink/75">
-            Most likely cause: this embedded wallet isn&rsquo;t authorized to
-            write records for {ensName}, or the resolver doesn&rsquo;t implement
-            setText. See the README on authorizing the operator address.
+            Most likely cause: the connected wallet isn&rsquo;t authorized to
+            write records for {node}, or the resolver doesn&rsquo;t implement
+            setText. See the README on authorizing the signing address.
           </p>
         </div>
       )}
