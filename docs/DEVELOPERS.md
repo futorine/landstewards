@@ -196,12 +196,6 @@ verifier built on "does this have a non-zero resolver?" approves everything,
 which is worse than having no verifier. Existence must come from registry state
 (`getState(...).status`) on the parent subregistry.
 
-**Published ABIs and addresses go stale.** Official docs have been observed
-listing decommissioned contracts as current, and getter names have changed case
-between versions in ways that revert rather than fail to compile. Verify against
-the deployed contract — a call that *compiles* proves nothing about whether the
-contract is live.
-
 **Idempotency is load-bearing.** Multi-step flows get interrupted: a wallet
 rejects, a tab loses focus, a page reloads. Every step here detects its own
 completed work and skips it, so retrying is always safe. Deriving proxy
